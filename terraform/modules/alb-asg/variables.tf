@@ -1,24 +1,13 @@
-variable "name" {
-  type = string
-}
-
-variable "instance_type" {
-  type    = string
-  default = "t2.micro"
-}
-
-variable "key_name" {
-  type = string
-}
-
-variable "vpc_id" {
-  type = string
-}
-
+variable "name" {}
+variable "key_name" {}
+variable "vpc_id" {}
 variable "subnet_ids" {
   type = list(string)
 }
-
-variable "sg_id" {
-  type = string
+variable "sg_id" {}
+variable "instance_type" {
+  default = "t2.micro"
+}
+variable "user_data_vars" {
+  type = map(string)
 }

@@ -1,7 +1,9 @@
-variable "vpc_name" {
-  type = string
+variable "name" {
+  description = "Name prefix for VPC resources"
+  type        = string
 }
 
 variable "region" {
-  type = string
+  description = "AWS region"
+  type        = string
 }

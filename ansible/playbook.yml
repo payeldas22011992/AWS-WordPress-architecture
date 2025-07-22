@@ -1,0 +1,84 @@
+---
+- name: Configure WordPress with EFS and RDS
+  hosts: wordpress
+  become: yes
+
+  vars:
+    efs_dns: "{{ efs_dns }}"
+    rds_host: "{{ rds_host }}"
+    db_name: "{{ db_name }}"
+    db_user: "{{ db_user }}"
+    db_password: "{{ db_password }}"
+
+  tasks:
+    - name: Install packages
+      yum:
+        name:
+          - httpd
+          - php
+          - php-mysqlnd
+          - wget
+          - unzip
+          - amazon-efs-utils
+        state: present
+
+    - name: Enable and start Apache
+      service:
+        name: httpd
+        state: started
+        enabled: true
+
+    - name: Download WordPress
+      get_url:
+        url: https://wordpress.org/latest.zip
+        dest: /tmp/latest.zip
+
+    - name: Unzip WordPress
+      unarchive:
+        src: /tmp/latest.zip
+        dest: /var/www/html/
+        remote_src: yes
+
+    - name: Copy files to web root
+      command: cp -r /var/www/html/wordpress/* /var/www/html/
+      args:
+        creates: /var/www/html/index.php
+
+    - name: Mount EFS
+      mount:
+        path: /var/www/html/wp-content
+        src: "{{ efs_dns }}:/"
+        fstype: efs
+        opts: "_netdev"
+        state: mounted
+
+    - name: Add EFS to fstab
+      lineinfile:
+        path: /etc/fstab
+        line: "{{ efs_dns }}:/ /var/www/html/wp-content efs defaults,_netdev 0 0"
+        state: present
+
+    - name: Set permissions
+      file:
+        path: /var/www/html/
+        owner: apache
+        group: apache
+        recurse: yes
+        mode: '0755'
+
+    - name: Configure wp-config.php
+      copy:
+        dest: /var/www/html/wp-config.php
+        content: |
+          <?php
+          define('DB_NAME', '{{ db_name }}');
+          define('DB_USER', '{{ db_user }}');
+          define('DB_PASSWORD', '{{ db_password }}');
+          define('DB_HOST', '{{ rds_host }}');
+          define('DB_CHARSET', 'utf8');
+          define('DB_COLLATE', '');
+          $table_prefix = 'wp_';
+          define('WP_DEBUG', false);
+          if ( !defined('ABSPATH') )
+              define('ABSPATH', dirname(__FILE__) . '/');
+          require_once(ABSPATH . 'wp-settings.php');

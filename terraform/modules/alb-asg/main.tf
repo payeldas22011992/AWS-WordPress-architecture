@@ -1,45 +1,35 @@
-resource "aws_launch_template" "wp_template" {
+resource "aws_launch_template" "wp_lt" {
   name_prefix   = "${var.name}-lt"
   image_id      = data.aws_ami.amazon_linux.id
   instance_type = var.instance_type
   key_name      = var.key_name
 
-  user_data = filebase64("${path.module}/launch_template.sh")
-
-  network_interfaces {
-    security_groups = [var.sg_id]
-    associate_public_ip_address = true
-  }
+  user_data = base64encode(templatefile("${path.module}/user_data.sh", var.user_data_vars))
 
   tag_specifications {
     resource_type = "instance"
     tags = {
-      Name = "${var.name}-ec2"
+      Name = "${var.name}-wp-instance"
     }
   }
-}
 
-data "aws_ami" "amazon_linux" {
-  most_recent = true
-  owners      = ["amazon"]
-
-  filter {
-    name   = "name"
-    values = ["amzn2-ami-hvm-*-x86_64-gp2"]
+  network_interfaces {
+    associate_public_ip_address = true
+    security_groups             = [var.sg_id]
   }
 }
 
 resource "aws_autoscaling_group" "wp_asg" {
   name                      = "${var.name}-asg"
-  min_size                  = 1
-  max_size                  = 2
   desired_capacity          = 1
+  max_size                  = 2
+  min_size                  = 1
   vpc_zone_identifier       = var.subnet_ids
   health_check_type         = "EC2"
   health_check_grace_period = 300
 
   launch_template {
-    id      = aws_launch_template.wp_template.id
+    id      = aws_launch_template.wp_lt.id
     version = "$Latest"
   }
 
@@ -86,5 +76,15 @@ resource "aws_lb_listener" "wp_listener" {
   default_action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.wp_tg.arn
+  }
+}
+
+data "aws_ami" "amazon_linux" {
+  most_recent = true
+  owners      = ["amazon"]
+
+  filter {
+    name   = "name"
+    values = ["amzn2-ami-hvm-*-x86_64-gp2"]
   }
 }

@@ -1,26 +1,14 @@
-resource "aws_wafv2_ip_set" "allow_global" {
-  name               = "${var.name}-allow-global"
-  scope              = "CLOUDFRONT"
-  ip_address_version = "IPV4"
-
-  addresses = ["0.0.0.0/0"]
-
-  tags = {
-    Name = "${var.name}-ip-set"
-  }
-}
-
 resource "aws_wafv2_web_acl" "geo_acl" {
-  name        = "${var.name}-waf"
-  description = "Geo restriction for CloudFront"
-  scope       = "CLOUDFRONT"
+  name  = "${var.name}-waf"
+  scope = "CLOUDFRONT"
+
   default_action {
     allow {}
   }
 
   rule {
-    name     = "block-unsupported-countries"
-    priority = 0
+    name     = "block-geo"
+    priority = 1
 
     action {
       block {}
@@ -33,20 +21,16 @@ resource "aws_wafv2_web_acl" "geo_acl" {
     }
 
     visibility_config {
-      sampled_requests_enabled = true
       cloudwatch_metrics_enabled = true
-      metric_name = "geo-blocked"
+      sampled_requests_enabled   = true
+      metric_name                = "geo-block"
     }
   }
 
   visibility_config {
     cloudwatch_metrics_enabled = true
-    metric_name                = "${var.name}-geo"
     sampled_requests_enabled   = true
-  }
-
-  tags = {
-    Name = "${var.name}-waf"
+    metric_name                = "${var.name}-acl"
   }
 }
 
@@ -59,18 +43,21 @@ resource "aws_cloudfront_distribution" "cf" {
       http_port              = 80
       https_port             = 443
       origin_protocol_policy = "http-only"
-      origin_sslProtocols    = ["TLSv1.2"]
+      origin_ssl_protocols   = ["TLSv1.2"]
     }
   }
 
   enabled             = true
-  is_ipv6_enabled     = true
   default_root_object = "index.php"
+  is_ipv6_enabled     = true
+  web_acl_id          = aws_wafv2_web_acl.geo_acl.arn
 
   default_cache_behavior {
-    allowed_methods  = ["GET", "HEAD", "OPTIONS"]
-    cached_methods   = ["GET", "HEAD"]
-    target_origin_id = "alb-origin"
+    target_origin_id       = "alb-origin"
+    viewer_protocol_policy = "redirect-to-https"
+
+    allowed_methods = ["GET", "HEAD"]
+    cached_methods  = ["GET", "HEAD"]
 
     forwarded_values {
       query_string = true
@@ -79,12 +66,6 @@ resource "aws_cloudfront_distribution" "cf" {
         forward = "all"
       }
     }
-
-    viewer_protocol_policy = "redirect-to-https"
-
-    min_ttl     = 0
-    default_ttl = 3600
-    max_ttl     = 86400
   }
 
   restrictions {
@@ -97,9 +78,7 @@ resource "aws_cloudfront_distribution" "cf" {
     cloudfront_default_certificate = true
   }
 
-  web_acl_id = aws_wafv2_web_acl.geo_acl.arn
-
   tags = {
-    Name = "${var.name}-cloudfront"
+    Name = "${var.name}-cf"
   }
 }
